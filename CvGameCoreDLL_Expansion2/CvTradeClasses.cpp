@@ -71,10 +71,14 @@ void CvGameTrade::Uninit (void)
 void CvGameTrade::Reset (void)
 {
 	m_aTradeConnections.clear();
-	m_iNextID = 0;
-	m_CurrentTemporaryPopupRoute.iPlotX = 0;
-	m_CurrentTemporaryPopupRoute.iPlotY = 0;
-	m_CurrentTemporaryPopupRoute.type = TRADE_CONNECTION_INTERNATIONAL;
+	m_aPotentialTradePathsLand.clear();
+	m_aPotentialTradePathsWater.clear();
+	m_lastTradePathUpdate.clear();
+	m_aPartnersByOrigin.clear();
+	m_aPartnersByDestination.clear();
+
+	ResetTechDifference();
+	ResetPolicyDifference();
 }
 
 //	--------------------------------------------------------------------------------
@@ -487,25 +491,23 @@ bool CvGameTrade::CreateTradeRoute(CvCity* pOriginCity, CvCity* pDestCity, Domai
 	}
 
 	int iNewTradeRouteIndex = GetEmptyTradeRouteIndex();
-	CvAssertMsg(iNewTradeRouteIndex < (int)m_aTradeConnections.size(), "iNewTradeRouteIndex out of bounds");
-
-	// couldn't find valid connection, bail out
 	if (iNewTradeRouteIndex < 0)
 	{
-		TradeConnection kNewTradeConnection;
-		m_aTradeConnections.push_back(kNewTradeConnection);
-		iNewTradeRouteIndex = m_aTradeConnections.size() - 1;
+		iNewTradeRouteIndex = (int)m_aTradeConnections.size();
+		m_aTradeConnections.push_back( TradeConnection() );
 	}
 
-	iRouteID = m_iNextID;
-	m_aTradeConnections[iNewTradeRouteIndex].m_iID = m_iNextID;
+	//update cache
+	m_aPartnersByOrigin[pOriginCity->GetID()].insert(pDestCity->GetID());
+	m_aPartnersByDestination[pDestCity->GetID()].insert(pOriginCity->GetID());
+
+	m_aTradeConnections[iNewTradeRouteIndex].m_iID = GC.getGame().GetNextGlobalID();
 	m_aTradeConnections[iNewTradeRouteIndex].SetCities(pOriginCity,pDestCity);
 	m_aTradeConnections[iNewTradeRouteIndex].m_eDomain = eDomain;
 	m_aTradeConnections[iNewTradeRouteIndex].m_eConnectionType = eConnectionType;
 	m_aTradeConnections[iNewTradeRouteIndex].m_unitID = -1;
 
-	// increment m_iNextID for the next connection
-	m_iNextID += 1;
+	iRouteID = m_aTradeConnections[iNewTradeRouteIndex].m_iID;
 
 	CopyPathIntoTradeConnection(path, &(m_aTradeConnections[iNewTradeRouteIndex]));
 
@@ -694,39 +696,30 @@ bool CvGameTrade::CreateTradeRoute(CvCity* pOriginCity, CvCity* pDestCity, Domai
 }
 
 //	--------------------------------------------------------------------------------
-bool CvGameTrade::IsValidTradeRoutePath(CvCity* pOriginCity, CvCity* pDestCity, DomainTypes eDomain, SPath* pPath, bool bWarCheck)
+bool CvGameTrade::IsValidTradeRoutePath(CvCity* pOriginCity, CvCity* pDestCity, DomainTypes eDomain, SPath* pPath)
 {
-	SPath path;
-	//if we did not get an external pointer, make up our own
-	if (!pPath)
-		pPath = &path;
-
-	if (bWarCheck && GET_PLAYER(pOriginCity->getOwner()).IsAtWarWith(pDestCity->getOwner()))
-		return false;
-
-	if (HavePotentialTradePath(eDomain==DOMAIN_SEA,pOriginCity,pDestCity,pPath))
-	{
-		// check if beyond the origin player's trade range
-		int iMaxNormDist = GET_PLAYER(pOriginCity->getOwner()).GetTrade()->GetTradeRouteRange(eDomain, pOriginCity);
-
-		int iNormDist = pPath->iNormalizedDistanceRaw;
-		if (iNormDist>0 && iNormDist<=iMaxNormDist*SPath::getNormalizedDistanceBase())
-			return true;
-	}
-
-	return false;
+	return GetValidTradeRoutePathLength(pOriginCity, pDestCity, eDomain, pPath) > 0;
 }
 
 //	--------------------------------------------------------------------------------
-int CvGameTrade::GetValidTradeRoutePathLength(CvCity* pOriginCity, CvCity* pDestCity, DomainTypes eDomain, SPath* pPath, bool bWarCheck)
+int CvGameTrade::GetValidTradeRoutePathLength(CvCity* pOriginCity, CvCity* pDestCity, DomainTypes eDomain, SPath* pPath)
 {
 	SPath path;
 	//if we did not get an external pointer, make up our own
 	if (!pPath)
 		pPath = &path;
 
-	if (bWarCheck && GET_PLAYER(pOriginCity->getOwner()).IsAtWarWith(pDestCity->getOwner()))
-		return false;
+	if (GET_PLAYER(pOriginCity->getOwner()).IsAtWarWith(pDestCity->getOwner()))
+		return -1;
+
+#if defined(MOD_BALANCE_CORE_NO_PRESSURE_FROM_POP)
+	if (1)
+	{
+		CvTeam& kDestTeam = GET_TEAM(pDestCity->getTeam());
+		if (kDestTeam.isOpenBordersTradingAllowed() && !kDestTeam.IsAllowsOpenBordersToTeam(pOriginCity->getTeam()))
+			return -1;
+	}
+#endif
 
 	if (HavePotentialTradePath(eDomain == DOMAIN_SEA, pOriginCity, pDestCity, pPath))
 	{
@@ -906,45 +899,64 @@ int CvGameTrade::CountNumPlayerConnectionsToPlayer (PlayerTypes eFirstPlayer, Pl
 }
 
 //	--------------------------------------------------------------------------------
-bool CvGameTrade::CitiesHaveTradeConnection(CvCity* pFirstCity, CvCity* pSecondCity)
+bool CvGameTrade::CitiesHaveTradeConnection(CvCity* pFirstCity, CvCity* pSecondCity) const
 {
-	int iFirstCityX = pFirstCity->getX();
-	int iFirstCityY = pFirstCity->getY();
-	int iSecondCityX = pSecondCity->getX();
-	int iSecondCityY = pSecondCity->getY();
+	if (!pFirstCity || !pSecondCity)
+		return false;
 
-	for (uint ui = 0; ui < m_aTradeConnections.size(); ui++)
+	TradePartners::const_iterator it = m_aPartnersByOrigin.find(pFirstCity->GetID());
+	if (it != m_aPartnersByOrigin.end())
 	{
-		TradeConnection* pConnection = &(m_aTradeConnections[ui]);
-
-		if (IsTradeRouteIndexEmpty(ui))
-		{
-			continue;
-		}
-
-		if (pConnection->m_iOriginX == iFirstCityX && pConnection->m_iOriginY == iFirstCityY && pConnection->m_iDestX == iSecondCityX && pConnection->m_iDestY == iSecondCityY)
-		{
+		TradePartners::const_iterator::value_type::second_type::const_iterator it2 = it->second.find(pSecondCity->GetID());
+		if (it2 != it->second.end())
 			return true;
-		}
-		else if (pConnection->m_iOriginX == iSecondCityX && pConnection->m_iOriginY == iSecondCityY && pConnection->m_iDestX == iFirstCityX && pConnection->m_iDestY == iFirstCityY)
-		{
-			return true;
-		}
 	}
+
+	it = m_aPartnersByOrigin.find(pSecondCity->GetID());
+	if (it != m_aPartnersByOrigin.end())
+	{
+		TradePartners::const_iterator::value_type::second_type::const_iterator it2 = it->second.find(pFirstCity->GetID());
+		if (it2 != it->second.end())
+			return true;
+	}
+
+	//for (uint ui = 0; ui < m_aTradeConnections.size(); ui++)
+	//{
+	//	TradeConnection* pConnection = &(m_aTradeConnections[ui]);
+
+	//	if (IsTradeRouteIndexEmpty(ui))
+	//		continue;
+
+	//	if (pConnection->m_iOriginID == pFirstCity->GetID() && pConnection->m_iDestID == pSecondCity->GetID())
+	//		return true;
+
+	//	if (pConnection->m_iOriginID == pSecondCity->GetID() && pConnection->m_iDestID == pFirstCity->GetID())
+	//		return true;
+	//}
 
 	return false;	
 }
 
 //	--------------------------------------------------------------------------------
-int CvGameTrade::GetNumTimesOriginCity (CvCity* pCity, bool bOnlyInternational)
+int CvGameTrade::GetNumTimesOriginCity (CvCity* pCity, bool bOnlyInternational) const
 {
+	if (!pCity)
+		return 0;
+
+	//the fast way
+	if (!bOnlyInternational)
+	{
+		TradePartners::const_iterator it = m_aPartnersByOrigin.find(pCity->GetID());
+		return (it != m_aPartnersByOrigin.end()) ? it->second.size() : 0;
+	}
+
 	int iCount = 0;
 	int iCityX = pCity->getX();
 	int iCityY = pCity->getY();
 
 	for (uint ui = 0; ui < m_aTradeConnections.size(); ui++)
 	{
-		TradeConnection* pConnection = &(m_aTradeConnections[ui]);
+		const TradeConnection* pConnection = &(m_aTradeConnections[ui]);
 
 		if (IsTradeRouteIndexEmpty(ui))
 		{
@@ -971,15 +983,25 @@ int CvGameTrade::GetNumTimesOriginCity (CvCity* pCity, bool bOnlyInternational)
 }
 
 //	--------------------------------------------------------------------------------
-int CvGameTrade::GetNumTimesDestinationCity (CvCity* pCity, bool bOnlyInternational)
+int CvGameTrade::GetNumTimesDestinationCity (CvCity* pCity, bool bOnlyInternational) const
 {
+	if (!pCity)
+		return 0;
+
+	//the fast way
+	if (!bOnlyInternational)
+	{
+		TradePartners::const_iterator it = m_aPartnersByDestination.find(pCity->GetID());
+		return (it != m_aPartnersByDestination.end()) ? it->second.size() : 0;
+	}
+
 	int iCount = 0;
 	int iCityX = pCity->getX();
 	int iCityY = pCity->getY();
 
 	for (uint ui = 0; ui < m_aTradeConnections.size(); ui++)
 	{
-		TradeConnection* pConnection = &(m_aTradeConnections[ui]);
+		const TradeConnection* pConnection = &(m_aTradeConnections[ui]);
 
 		if (IsTradeRouteIndexEmpty(ui))
 		{
@@ -1020,16 +1042,9 @@ int CvGameTrade::GetEmptyTradeRouteIndex (void)
 }
 
 //	--------------------------------------------------------------------------------
-bool CvGameTrade::IsTradeRouteIndexEmpty(int iIndex)
+bool CvGameTrade::IsTradeRouteIndexEmpty(int iIndex) const
 {
-	if (m_aTradeConnections[iIndex].m_iOriginX == -1 && m_aTradeConnections[iIndex].m_iOriginY == -1 && m_aTradeConnections[iIndex].m_iDestX == -1 && m_aTradeConnections[iIndex].m_iDestY == -1)
-	{
-		return true;
-	}
-	else
-	{
-		return false;
-	}
+	return !m_aTradeConnections[iIndex].isValid();
 }
 
 //	--------------------------------------------------------------------------------
@@ -1062,11 +1077,11 @@ bool CvGameTrade::ClearTradeRoute(int iIndex)
 			pPlot->flipVisibility(eOwnerTeam);
 		}
 	}
-#if defined(MOD_BALANCE_CORE)
+
+	CvCity* pOriginCity = GET_PLAYER(eOriginPlayer).getCity(kTradeConnection.m_iOriginID);
+	CvCity* pDestCity = GET_PLAYER(eDestPlayer).getCity(kTradeConnection.m_iDestID);
 	if (kTradeConnection.m_eConnectionType == TRADE_CONNECTION_INTERNATIONAL)
 	{
-		CvCity* pOriginCity = GET_PLAYER(eOriginPlayer).getCity(kTradeConnection.m_iOriginID);
-		CvCity* pDestCity = GET_PLAYER(eDestPlayer).getCity(kTradeConnection.m_iDestID);
 		if (pOriginCity != NULL && pDestCity != NULL)
 		{
 			if (pDestCity->getOwner() != NO_PLAYER && GET_PLAYER(pDestCity->getOwner()).isMajorCiv())
@@ -1079,7 +1094,6 @@ bool CvGameTrade::ClearTradeRoute(int iIndex)
 			}
 		}
 	}
-#endif
 
 	//reset to default
 	kTradeConnection = TradeConnection();
@@ -1092,12 +1106,19 @@ bool CvGameTrade::ClearTradeRoute(int iIndex)
 		GET_PLAYER(eDestPlayer).UpdateReligion();
 
 	gDLL->TradeVisuals_DestroyRoute(iIndex, eOriginPlayer);
-#if defined(MOD_BALANCE_CORE)
+
+	//update cache
+	m_aPartnersByOrigin[pOriginCity->GetID()].erase(pDestCity->GetID());
+	m_aPartnersByDestination[pDestCity->GetID()].erase(pOriginCity->GetID());
+	if (m_aPartnersByOrigin[pOriginCity->GetID()].empty())
+		m_aPartnersByOrigin.erase(pOriginCity->GetID());
+	if (m_aPartnersByDestination[pDestCity->GetID()].empty())
+		m_aPartnersByDestination.erase(pDestCity->GetID());
+
 	UpdateTradePlots();
-#endif
 	return true;
 }
-#if defined(MOD_BALANCE_CORE)
+
 void CvGameTrade::UpdateTradePlots()
 {
 	int iNumPlotsInEntireWorld = GC.getMap().numPlots();
@@ -1123,6 +1144,7 @@ void CvGameTrade::UpdateTradePlots()
 		}
 	}
 }
+
 //	--------------------------------------------------------------------------------
 //	Returns number of turns to complete the TR between two cities
 //	iCircuitsToComplete calculated so it can be used in CreateTradeRoute()
@@ -1162,17 +1184,11 @@ int CvGameTrade::GetTradeRouteTurns(CvCity* pOriginCity, CvCity* pDestCity, Doma
 		*piCircuitsToComplete = iCircuitsToComplete;
 	return int(fTurnsPerCircuit * iCircuitsToComplete);
 }
-#endif
+
 //	--------------------------------------------------------------------------------
 /// Called when a city changes hands
-#if defined(MOD_BUGFIX_MINOR)
 void CvGameTrade::ClearAllCityTradeRoutes (CvPlot* pPlot, bool bIncludeTransits)
-#else
-void CvGameTrade::ClearAllCityTradeRoutes (CvPlot* pPlot)
-#endif
 {
-	CvAssert(pPlot != NULL);
-
 	if (pPlot)
 	{
 		int iX = pPlot->getX();
@@ -2139,22 +2155,13 @@ void CvGameTrade::DisplayTemporaryPopupTradeRoute(int iDestX, int iDestY, TradeC
 			}
 		}
 	}
-
-	m_CurrentTemporaryPopupRoute.iPlotX = iDestX;
-	m_CurrentTemporaryPopupRoute.iPlotY = iDestY;
-	m_CurrentTemporaryPopupRoute.type = type;
 }
 
 //	----------------------------------------------------------------------------
-void CvGameTrade::HideTemporaryPopupTradeRoute(int iPlotX, int iPlotY, TradeConnectionType type)
+void CvGameTrade::HideTemporaryPopupTradeRoute()
 {
-	if (iPlotX == m_CurrentTemporaryPopupRoute.iPlotX &&
-		iPlotY == m_CurrentTemporaryPopupRoute.iPlotY &&
-		type == m_CurrentTemporaryPopupRoute.type) 
-	{
-		gDLL->TradeVisuals_DeactivatePopupRoute();
-		gDLL->TradeVisuals_DestroyRoute(TEMPORARY_POPUPROUTE_ID,GC.getGame().getActivePlayer());
-	}
+	gDLL->TradeVisuals_DeactivatePopupRoute();
+	gDLL->TradeVisuals_DestroyRoute(TEMPORARY_POPUPROUTE_ID,GC.getGame().getActivePlayer());
 }
 
 //	----------------------------------------------------------------------------
@@ -2314,7 +2321,18 @@ FDataStream& operator>>(FDataStream& loadFrom, CvGameTrade& writeTo)
 		}
 	}
 
-	loadFrom >> writeTo.m_iNextID;
+	//restore cache
+	for (TradeConnectionList::iterator it=writeTo.m_aTradeConnections.begin(); it!=writeTo.m_aTradeConnections.end(); ++it)
+	{
+		if (it->isValid())
+		{
+			writeTo.m_aPartnersByOrigin[it->m_iOriginID].insert(it->m_iDestID);
+			writeTo.m_aPartnersByDestination[it->m_iDestID].insert(it->m_iOriginID);
+		}
+	}
+	
+	int dummy;
+	loadFrom >> dummy;
 
 	return loadFrom;
 }
@@ -2392,7 +2410,7 @@ FDataStream& operator<<(FDataStream& saveTo, const CvGameTrade& readFrom)
 		}
 	}
 
-	saveTo << readFrom.m_iNextID;
+	saveTo << 123u; //dummy
 
 	return saveTo;
 }

@@ -3506,31 +3506,33 @@ int CvLuaGame::lGetTradeRoute(lua_State* L)
 }
 #endif
 
+//wtf?
+int gVisTradeRouteDestX = -1;
+int gVisTradeRouteDestY = -1;
+TradeConnectionType gVisTradeRouteType = TRADE_CONNECTION_INTERNATIONAL;
+
 //------------------------------------------------------------------------------
 int CvLuaGame::lSelectedUnit_SpeculativePopupTradeRoute_Display(lua_State* L)
 {
-	int iPlotX,iPlotY;
-	TradeConnectionType type;
-	DomainTypes eDomain;
+	gVisTradeRouteDestX = lua_tointeger(L,1);
+	gVisTradeRouteDestY = lua_tointeger(L,2);
+	gVisTradeRouteType = (TradeConnectionType)lua_tointeger(L,3);
+	DomainTypes eDomain = (DomainTypes)lua_tointeger(L, 4);
 
-	iPlotX = lua_tointeger(L,1);
-	iPlotY = lua_tointeger(L,2);
-	type = (TradeConnectionType)lua_tointeger(L,3);
-	eDomain = (DomainTypes)lua_tointeger(L, 4);
+	GC.getGame().GetGameTrade()->DisplayTemporaryPopupTradeRoute(gVisTradeRouteDestX,gVisTradeRouteDestY,gVisTradeRouteType,eDomain);
 
-	GC.getGame().GetGameTrade()->DisplayTemporaryPopupTradeRoute(iPlotX,iPlotY,type, eDomain);
 	return 0;
 }
 //------------------------------------------------------------------------------
 int CvLuaGame::lSelectedUnit_SpeculativePopupTradeRoute_Hide(lua_State* L)
 {
-	int iPlotX,iPlotY;
-	TradeConnectionType type;
-	
-	iPlotX = lua_tointeger(L,1);
-	iPlotY = lua_tointeger(L,2);
-	type = (TradeConnectionType)lua_tointeger(L,3);
-	GC.getGame().GetGameTrade()->HideTemporaryPopupTradeRoute(iPlotX,iPlotY,type);
+	int iPlotX = lua_tointeger(L,1);
+	int iPlotY = lua_tointeger(L,2);
+	TradeConnectionType type = (TradeConnectionType)lua_tointeger(L,3);
+
+	if (iPlotX == gVisTradeRouteDestX && iPlotY == gVisTradeRouteDestY && gVisTradeRouteType == type)
+		GC.getGame().GetGameTrade()->HideTemporaryPopupTradeRoute();
+
 	return 0;
 }
 //------------------------------------------------------------------------------

@@ -993,6 +993,8 @@
 	<Row Class="6" Name="BALANCE_CORE_POLICIES" Value="0"/>
 	<!-- The more dangerous barbarians element of COMMUNITY_PATCH -->
 	<Row Class="6" Name="BALANCE_CORE_BARBARIAN_THEFT" Value="0"/>
+	<!-- No religious pressure from population -->
+	<Row Class="6" Name="BALANCE_CORE_NO_PRESSURE_FROM_POP" Value="0"/>
 	<!-- Turn 0 Settler moves of COMMUNITY_PATCH -->
 	<Row Class="6" Name="BALANCE_CORE_SETTLER_MOVE" Value="0"/>
 	<!-- Resources given Flavor Value of COMMUNITY_PATCH -->

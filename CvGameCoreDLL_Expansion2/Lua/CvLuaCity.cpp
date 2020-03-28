@@ -334,6 +334,7 @@ void CvLuaCity::PushMethods(lua_State* L, int t)
 	Method(GetSecondaryReligion);
 	Method(GetSecondaryReligionPantheonBelief);
 	Method(GetPressurePerTurn);
+	Method(GetAccumulatedPressure);
 	Method(ConvertPercentFollowers);
 	Method(AdoptReligionFully);
 	Method(GetReligionBuildingClassHappiness);
@@ -3492,10 +3493,20 @@ int CvLuaCity::lGetPressurePerTurn(lua_State* L)
 	CvCity* pkCity = GetInstance(L);
 	ReligionTypes eReligion = (ReligionTypes)lua_tointeger(L, 2);
 	int iNumTradeRoutes;
-	const int iResult = (int)pkCity->GetCityReligions()->GetPressurePerTurn(eReligion, iNumTradeRoutes);
+	const int iResult = pkCity->GetCityReligions()->GetPressurePerTurn(eReligion, iNumTradeRoutes);
 	lua_pushinteger(L, iResult);
 	lua_pushinteger(L, iNumTradeRoutes);
 	return 2;
+}
+//------------------------------------------------------------------------------
+//int GetPressure() const;
+int CvLuaCity::lGetAccumulatedPressure(lua_State* L)
+{
+	CvCity* pkCity = GetInstance(L);
+	ReligionTypes eReligion = (ReligionTypes)lua_tointeger(L, 2);
+	const int iResult = pkCity->GetCityReligions()->GetPressure(eReligion);
+	lua_pushinteger(L, iResult);
+	return 1;
 }
 //------------------------------------------------------------------------------
 //int ConvertPercentFollowers(ReligionTypes eToReligion, ReligionTypes eFromReligion, int iPercent) const;

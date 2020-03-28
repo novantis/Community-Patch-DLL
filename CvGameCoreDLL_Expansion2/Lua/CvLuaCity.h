@@ -315,7 +315,6 @@ protected:
 	static int lGetFaithPerTurnFromReligion(lua_State* L);
 	static int lChangeFaithPerTurnFromReligion(lua_State* L);
 
-
 	static int lHasConvertedToReligionEver(lua_State* L);
 	static int lIsReligionInCity(lua_State* L);
 	static int lIsHolyCityForReligion(lua_State* L);
@@ -325,6 +324,7 @@ protected:
 	static int lGetSecondaryReligion(lua_State* L);
 	static int lGetSecondaryReligionPantheonBelief(lua_State* L);
 	static int lGetPressurePerTurn(lua_State* L);
+	static int lGetAccumulatedPressure(lua_State* L);
 	static int lConvertPercentFollowers(lua_State* L);
 	static int lAdoptReligionFully(lua_State* L);
 	static int lGetReligionBuildingClassHappiness(lua_State* L);

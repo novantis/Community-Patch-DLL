@@ -167,8 +167,10 @@ public:
 	void DoTurn();
 	void SpreadReligion();
 	void SpreadReligionToOneCity(CvCity* pCity);
-	bool IsCityConnectedToCity(ReligionTypes eReligion, CvCity* pLoopCity, CvCity* pCity, bool& bConnectedWithTrade, int& iApparentDistance, int& iMaxDistance);
+
+	bool IsWithinSpreadingRange(ReligionTypes eReligion, CvCity* pLoopCity, CvCity* pCity, int& iApparentDistance, int& iMaxDistance);
 	bool IsValidTarget(ReligionTypes eReligion, CvCity* pFromCity, CvCity* pToCity);
+
 	// Functions invoked each player turn
 	EraTypes GetFaithPurchaseGreatPeopleEra(CvPlayer* pPlayer, bool bIgnorePlayer = false);
 	void DoPlayerTurn(CvPlayer& kPlayer);
@@ -274,7 +276,7 @@ public:
 	std::vector<BeliefTypes> GetAvailableReformationBeliefs();
 #endif
 
-	int GetAdjacentCityReligiousPressure(ReligionTypes eReligion, CvCity *pFromCity, CvCity *pToCity, int& iNumTradeRoutesInfluencing, bool bActualValue, bool bPretendTradeConnection, bool bConnectedWithTrade, int iApparentDistance, int iMaxDistance);
+	int GetAdjacentCityReligiousPressure(ReligionTypes eReligion, CvCity *pFromCity, CvCity *pToCity, bool bConnectedWithTrade, int iApparentDistance, int iMaxDistance);
 
 	// Great Prophet/Person information functions
 	int GetFaithGreatProphetNumber(int iNum) const;

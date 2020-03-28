@@ -97,7 +97,7 @@ struct TradeConnection
 };
 
 typedef std::vector<TradeConnection> TradeConnectionList;
-
+typedef std::map<int,std::set<int>> TradePartners;
 typedef std::map<int,std::map<int,SPath>> TradePathLookup;
 
 class CvGameTrade
@@ -116,8 +116,8 @@ public:
 	bool CanCreateTradeRoute(PlayerTypes eOriginPlayer, PlayerTypes eDestPlayer, DomainTypes eDomainRestriction);
 	bool CreateTradeRoute (CvCity* pOriginCity, CvCity* pDestCity, DomainTypes eDomain, TradeConnectionType eConnectionType, int& iRouteID);
 
-	bool IsValidTradeRoutePath (CvCity* pOriginCity, CvCity* pDestCity, DomainTypes eDomain, SPath* pPathOut=NULL, bool bWarCheck = true);
-	int GetValidTradeRoutePathLength(CvCity* pOriginCity, CvCity* pDestCity, DomainTypes eDomain, SPath* pPathOut = NULL, bool bWarCheck = true);
+	bool IsValidTradeRoutePath (CvCity* pOriginCity, CvCity* pDestCity, DomainTypes eDomain, SPath* pPathOut=NULL);
+	int GetValidTradeRoutePathLength(CvCity* pOriginCity, CvCity* pDestCity, DomainTypes eDomain, SPath* pPathOut = NULL);
 	bool IsDestinationExclusive(const TradeConnection& kTradeConnection);
 	bool IsConnectionInternational (const TradeConnection& kTradeConnection);
 
@@ -125,27 +125,22 @@ public:
 	bool IsPlayerConnectedToPlayer (PlayerTypes eFirstPlayer, PlayerTypes eSecondPlayer, bool bFirstPlayerOnly = false);
 	int CountNumPlayerConnectionsToPlayer (PlayerTypes eFirstPlayer, PlayerTypes eSecondPlayer);
 
-	bool CitiesHaveTradeConnection (CvCity* pFirstCity, CvCity* pSecondCity);
-
-	int GetNumTimesOriginCity (CvCity* pCity, bool bOnlyInternational);
-	int GetNumTimesDestinationCity (CvCity* pCity, bool bOnlyInternational);
+	bool CitiesHaveTradeConnection (CvCity* pFirstCity, CvCity* pSecondCity) const;
+	int GetNumTimesOriginCity (CvCity* pCity, bool bOnlyInternational) const;
+	int GetNumTimesDestinationCity (CvCity* pCity, bool bOnlyInternational) const;
 
 	void CopyPathIntoTradeConnection (const SPath& path, TradeConnection* pTradeConnection);
 
 	int GetDomainModifierTimes100 (DomainTypes eDomain);
 
 	int GetEmptyTradeRouteIndex (void);
-	bool IsTradeRouteIndexEmpty (int iIndex);
+	bool IsTradeRouteIndexEmpty (int iIndex) const;
 	bool ClearTradeRoute (int iIndex);
 #if defined(MOD_BALANCE_CORE)
 	void UpdateTradePlots();
 	int GetTradeRouteTurns(CvCity* pOriginCity, CvCity* pDestCity, DomainTypes eDomain, int* piCircuitsToComplete = NULL);
 #endif
-#if defined(MOD_BUGFIX_MINOR)
 	void ClearAllCityTradeRoutes (CvPlot* pPlot, bool bIncludeTransits = false); // called when a city is captured or traded
-#else
-	void ClearAllCityTradeRoutes (CvPlot* pPlot); // called when a city is captured or traded
-#endif
 	void ClearAllCivTradeRoutes (PlayerTypes ePlayer); // called from world congress code
 	void ClearAllCityStateTradeRoutes (void); // called from world congress code
 #if defined(MOD_BALANCE_CORE)
@@ -187,7 +182,7 @@ public:
 	bool StepUnit (int iIndex); // move a trade unit a single step along its path (called by MoveUnit)
 
 	void DisplayTemporaryPopupTradeRoute(int iPlotX, int iPlotY, TradeConnectionType type, DomainTypes eDomain);
-	void HideTemporaryPopupTradeRoute(int iPlotX, int iPlotY, TradeConnectionType type);
+	void HideTemporaryPopupTradeRoute();
 
 	CvString GetLogFileName() const;
 	void LogTradeMsg(CvString& strMsg);
@@ -203,20 +198,16 @@ public:
 
 protected:
 
-	TradeConnectionList m_aTradeConnections;
+	TradeConnectionList m_aTradeConnections; //serialized
+	TradePartners m_aPartnersByOrigin; //not serialized
+	TradePartners m_aPartnersByDestination; //not serialized
 
 	TradePathLookup m_aPotentialTradePathsLand;
 	TradePathLookup m_aPotentialTradePathsWater;
 	std::map<uint,int> m_lastTradePathUpdate;
 
-	int m_iNextID; // used to assign IDs to trade routes to avoid confusion when some are disrupted in multiplayer
 	int m_aaiTechDifference[MAX_MAJOR_CIVS][MAX_MAJOR_CIVS];
 	int m_aaiPolicyDifference[MAX_MAJOR_CIVS][MAX_MAJOR_CIVS];
-
-	struct {
-		int iPlotX, iPlotY;
-		TradeConnectionType type;
-	} m_CurrentTemporaryPopupRoute;
 
 	friend FDataStream& operator>>(FDataStream&, CvGameTrade&);
 	friend FDataStream& operator<<(FDataStream&, const CvGameTrade&);
