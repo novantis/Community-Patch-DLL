@@ -2488,7 +2488,7 @@ bool CvStepFinder::Configure(const SPathFinderUserData& config)
 		m_iBasicPlotCost = PATH_BASE_COST;
 		break;
 	case PT_TRADE_WATER:
-		SetFunctionPointers(NULL, PathHeuristic, TradeRouteWaterPathCost, TradeRouteWaterValid, NULL, TradePathInitialize, TradePathUninitialize);
+		SetFunctionPointers(NULL, StepHeuristic, TradeRouteWaterPathCost, TradeRouteWaterValid, NULL, TradePathInitialize, TradePathUninitialize);
 		m_iBasicPlotCost = PATH_BASE_COST;
 		break;
 	case PT_TRADE_LAND:
@@ -3044,17 +3044,29 @@ int TradeRouteLandValid(const CvAStarNode* parent, const CvAStarNode* node, cons
 		return TRUE;
 
 	const TradePathCacheData* pCacheData = reinterpret_cast<const TradePathCacheData*>(finder->GetScratchBuffer());
-	CvMap& kMap = GC.getMap();
-	CvPlot* pToPlot = kMap.plotUnchecked(node->m_iX, node->m_iY);
-
-	if (pToPlot->isCity())
-	{
-		return TRUE;
-	}
+	CvPlot* pToPlot = GC.getMap().plotUnchecked(node->m_iX, node->m_iY);
 
 	if (pToPlot->isWater() || !pToPlot->isRevealed(pCacheData->GetTeam()))
 	{
 		return FALSE;
+	}
+
+	if (pToPlot->isCity())
+	{
+		if (GET_TEAM(pCacheData->GetTeam()).isAtWar(pToPlot->getTeam()))
+			return FALSE;
+
+#if defined(MOD_BALANCE_CORE_NO_PRESSURE_FROM_POP)
+		//cannot enter cities without open borders once they are available
+		if (1)
+		{
+			CvTeam& kDestTeam = GET_TEAM(pToPlot->getTeam());
+			if (kDestTeam.isOpenBordersTradingAllowed() && !kDestTeam.IsAllowsOpenBordersToTeam(pCacheData->GetTeam()))
+				return FALSE;
+		}
+#endif
+
+		return TRUE;
 	}
 
 	if (pToPlot->getImprovementType()==(ImprovementTypes)GC.getBARBARIAN_CAMP_IMPROVEMENT())
@@ -3074,12 +3086,8 @@ int TradeRouteLandValid(const CvAStarNode* parent, const CvAStarNode* node, cons
 
 int TradeRouteWaterPathCost(const CvAStarNode*, const CvAStarNode* node, const SPathFinderUserData&, CvAStar* finder)
 {
-	CvMap& kMap = GC.getMap();
 	const TradePathCacheData* pCacheData = reinterpret_cast<const TradePathCacheData*>(finder->GetScratchBuffer());
-
-	int iToPlotX = node->m_iX;
-	int iToPlotY = node->m_iY;
-	CvPlot* pToPlot = kMap.plotUnchecked(iToPlotX, iToPlotY);
+	CvPlot* pToPlot = GC.getMap().plotUnchecked(node->m_iX, node->m_iY);
 
 	int iCost = PATH_BASE_COST;
 
@@ -3106,12 +3114,26 @@ int TradeRouteWaterValid(const CvAStarNode* parent, const CvAStarNode* node, con
 		return TRUE;
 
 	const TradePathCacheData* pCacheData = reinterpret_cast<const TradePathCacheData*>(finder->GetScratchBuffer());
-
-	CvMap& kMap = GC.getMap();
-	CvPlot* pNewPlot = kMap.plotUnchecked(node->m_iX, node->m_iY);
+	CvPlot* pNewPlot = GC.getMap().plotUnchecked(node->m_iX, node->m_iY);
 
 	if (!pNewPlot->isRevealed(pCacheData->GetTeam()))
 		return FALSE;
+
+	if (pNewPlot->isCity())
+	{
+		if (GET_TEAM(pCacheData->GetTeam()).isAtWar(pNewPlot->getTeam()))
+			return FALSE;
+
+#if defined(MOD_BALANCE_CORE_NO_PRESSURE_FROM_POP)
+		//cannot enter cities without open borders once they are available
+		if (1)
+		{
+			CvTeam& kDestTeam = GET_TEAM(pNewPlot->getTeam());
+			if (kDestTeam.isOpenBordersTradingAllowed() && !kDestTeam.IsAllowsOpenBordersToTeam(pCacheData->GetTeam()))
+				return FALSE;
+		}
+#endif
+	}
 
 	//ice in unowned territory is not allowed
 	if (pNewPlot->isIce() && !pNewPlot->isOwned())

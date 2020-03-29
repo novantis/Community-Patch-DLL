@@ -408,7 +408,7 @@ void CvGameReligions::SpreadReligionToOneCity(CvCity* pCity)
 					if (pLoopCity->GetCityReligions()->GetNumFollowers(eReligion) > 0)
 					{
 						bool bConnectedWithTrade = GC.getGame().GetGameTrade()->CitiesHaveTradeConnection(pCity, pLoopCity);
-						int iApparentDistance = 1, iMaxDistance = 10;
+						int iApparentDistance = 1, iMaxDistance = 10; //just a sane default
 						if (!bConnectedWithTrade && !IsWithinSpreadingRange(eReligion, pLoopCity, pCity, iApparentDistance, iMaxDistance))
 							continue;
 
@@ -3277,6 +3277,14 @@ int CvGameReligions::GetAdjacentCityReligiousPressure(ReligionTypes eReligion, C
 		return 0;
 	}
 
+#if defined(MOD_BALANCE_CORE_NO_PRESSURE_FROM_POP)
+	if (1)
+	{
+		if (!bConnectedWithTrade)
+			return 0;
+	}
+#endif
+
 	const CvReligion* pReligion = GetReligion(eReligion, pFromCity->getOwner());
 	if (!pReligion)
 	{
@@ -3399,7 +3407,7 @@ int CvGameReligions::GetAdjacentCityReligiousPressure(ReligionTypes eReligion, C
 
 	//some multiplicative effects
 	//if there is an explicit trade route, these don't apply
-	if (!bConnectedWithTrade)
+	if (!bConnectedWithTrade && iPressureMod>0)
 	{
 		//scale by relative faith output (the weaker city cannot influence the stronger city much)
 		float fFaithPowerMod = sqrt(float(pFromCity->getYieldRateTimes100(YIELD_FAITH, true)) / max(pToCity->getYieldRateTimes100(YIELD_FAITH, true), 100));
@@ -5365,28 +5373,14 @@ int CvCityReligions::GetPressurePerTurn(ReligionTypes eReligion, int& iNumTradeR
 
 				bool bConnectedWithTrade = GC.getGame().GetGameTrade()->CitiesHaveTradeConnection(m_pCity, pLoopCity);
 
-				int iApparentDistance = 1, iMaxDistance = 10;
+				int iApparentDistance = 1, iMaxDistance = 10; //just a sane default
 				if (!bConnectedWithTrade && !GC.getGame().GetGameReligions()->IsWithinSpreadingRange(eReligion, pLoopCity, m_pCity, iApparentDistance, iMaxDistance))
 					continue;
-
-#if defined(MOD_BALANCE_CORE_NO_PRESSURE_FROM_POP)
-				if (1)
-				{
-					if (bConnectedWithTrade && pLoopCity->GetCityReligions()->GetReligiousMajority() == eReligion)
-					{
-						int iNeighborPressure = GC.getGame().GetGameReligions()->GetAdjacentCityReligiousPressure(eReligion, pLoopCity, m_pCity, bConnectedWithTrade, iApparentDistance, iMaxDistance);
-
-						iTotalPressure += iNeighborPressure;
-						iNumTradeRoutesInvolved++;
-					}
-					continue;
-				}
-#endif
 
 				int iNeighborPressure = GC.getGame().GetGameReligions()->GetAdjacentCityReligiousPressure(eReligion, pLoopCity, m_pCity, bConnectedWithTrade, iApparentDistance, iMaxDistance);
 
 				iTotalPressure += iNeighborPressure;
-				if (bConnectedWithTrade)
+				if (bConnectedWithTrade && iNeighborPressure>0)
 					iNumTradeRoutesInvolved++;
 			}
 
@@ -5435,28 +5429,33 @@ int CvCityReligions::GetNumTradeRouteConnections (ReligionTypes eReligion)
 }
 
 /// Would this city exert religious pressure toward the target city if connected with a trade route
-bool CvCityReligions::WouldExertTradeRoutePressureToward (CvCity* pTargetCity, ReligionTypes& eReligion, int& iAmount)
+bool CvCityReligions::WouldExertTradeRoutePressureToward(CvCity* pTargetCity, ReligionTypes& eReligion, int& iAmount)
 {
+	iAmount = 0;
 	eReligion = GetReligiousMajority();
 
-	// if there isn't a religious connection, whatvz
+	// if there isn't a religious connection
 	if (eReligion == NO_RELIGION)
-	{
-		iAmount = 0;
 		return false;
-	}
 
-	int iApparentDistance = 1, iMaxDistance = 10;
-	bool bCouldSpreadWithoutTrade = GC.getGame().GetGameReligions()->IsWithinSpreadingRange(eReligion, m_pCity, pTargetCity, iApparentDistance, iMaxDistance);
-	if (!bCouldSpreadWithoutTrade)
-		return true;
+#if defined(MOD_BALANCE_CORE_NO_PRESSURE_FROM_POP)
+	bool bConnectedWithTrade = GC.getGame().GetGameTrade()->CitiesHaveTradeConnection(m_pCity, pTargetCity);
+	if (bConnectedWithTrade)
+		return false;
+#endif
+
+	int iApparentDistance = 1, iMaxDistance = 10; //just a sane default
+	/*bool bIgnored = */ GC.getGame().GetGameReligions()->IsWithinSpreadingRange(eReligion, m_pCity, pTargetCity, iApparentDistance, iMaxDistance);
 
 	//still possible that the trade route doesn't gain us anything
 	int iWithTR = GC.getGame().GetGameReligions()->GetAdjacentCityReligiousPressure(eReligion, m_pCity, pTargetCity, true, iApparentDistance, iMaxDistance);
 	int iNoTR = GC.getGame().GetGameReligions()->GetAdjacentCityReligiousPressure(eReligion, m_pCity, pTargetCity, false, iApparentDistance, iMaxDistance);
 
-	iAmount = (iWithTR-iNoTR);
-	return (iAmount>0);
+	//out parameter
+	//pressure should always be greater or equal with a traderoute!
+	iAmount = max(0, iWithTR - iNoTR);
+
+	return (iWithTR > iNoTR);
 }
 
 

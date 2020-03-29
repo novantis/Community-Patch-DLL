@@ -94,8 +94,6 @@
 /// Buildings that contribute towards getting an ideology act as a unique building for the purposes of tech scoring
 #define AUI_PLAYERTECHS_RESET_IDEOLOGY_UNLOCKERS_COUNT_AS_UNIQUE
 
-/// If the international trade route would be to a minor, the gold and tech received by the minor do not count
-#define AUI_TRADE_SCORE_INTERNATIONAL_MAX_DELTA_WITH_MINORS
 /// Score for a trade route from religious pressure is now relative to how much pressure there already is at the city
 #define AUI_TRADE_SCORE_INTERNATIONAL_RELATIVE_RELIGION_SCORING
 /// Instead of simply doubling score if we want the tourism boost, the multiplier is based on our grand strategy
