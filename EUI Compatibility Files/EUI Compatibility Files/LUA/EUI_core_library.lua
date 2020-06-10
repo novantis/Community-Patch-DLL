@@ -316,6 +316,7 @@ function table:insertLocalizedIfNonZero( textKey, ... )
 	end
 end
 function table:insertLocalizedBulletIfNonZero( a, b, ... )
+	if a == nil then return end
 	if tonumber( b ) then
 		if b ~= 0 then
 			return table_insert( self, "[ICON_BULLET]" .. L( a, b, ... ) )
